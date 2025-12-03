@@ -3,7 +3,7 @@
 Official PyTorch implementation of **GenEval** (WACV 2026).
 
 **Paper:** [Link to paper when published]  
-**Authors:** [Your name], Ayan Banerjee, Sandeep Gupta  
+**Authors:**  Ayan Banerjee, Kuntal Prakash Thakur Sandeep Gupta  
 **Affiliation:** IMPACT Lab, Arizona State University
 
 ## Overview
@@ -53,11 +53,10 @@ python diabetic_retinopathy/evaluate.py \
 ```
 
 ## Pretrained Models
-LoRA adapters available on HuggingFace:
-- [ImpactLabASU/GenEval-APTOS](link)
-- [ImpactLabASU/GenEval-EyePACS](link)
-- [ImpactLabASU/GenEval-Messidor1](link)
-- [ImpactLabASU/GenEval-Messidor2](link)
+LoRA adapters available on Dropbox:
+```bash
+https://www.dropbox.com/scl/fo/e51mect061togeqdwq2wg/ALCG9_9IPHLExKlpghC_6ks?rlkey=4xrh2df0y3xnv5yph1pbc91am&st=jhpgto0w&dl=0
+```
 
 ## Citation
 ```bibtex
