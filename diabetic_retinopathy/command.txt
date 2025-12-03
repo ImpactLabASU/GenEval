@@ -1,0 +1,29 @@
+# Training (SDG example: APTOS)
+python train.py \
+  --dataset aptos \
+  --data_path /path/to/aptos/images \
+  --csv_path /path/to/aptos/labels.csv \
+  --output_dir ./checkpoints/aptos
+
+# Training (MDG example: Messidor-2 + EyePACS)
+python train.py \
+  --datasets messidor2 eyepacs \
+  --data_paths /path/to/messidor2/images /path/to/eyepacs/images \
+  --csv_paths /path/to/messidor2/labels.csv /path/to/eyepacs/labels.csv \
+  --output_dir ./checkpoints/mdg_mix
+
+# Evaluation (SDG cross-domain example)
+python evaluate.py \
+  --model_path ./checkpoints/aptos/lora_adapter \
+  --test_dataset eyepacs \
+  --test_data_path /path/to/eyepacs/images \
+  --test_csv_path /path/to/eyepacs/labels.csv \
+  --output_file ./results/aptos_to_eyepacs.csv
+
+# Evaluation (MDG model on Messidor-2)
+python evaluate.py \
+  --model_path ./checkpoints/mdg_mix/lora_adapter \
+  --test_dataset messidor2 \
+  --test_data_path /path/to/messidor2/images \
+  --test_csv_path /path/to/messidor2/labels.csv \
+  --output_file ./results/mdg_on_messidor2.csv
