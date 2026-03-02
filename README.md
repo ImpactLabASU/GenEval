@@ -2,8 +2,8 @@
 
 Official PyTorch implementation of **GenEval** (WACV 2026).
 
-**Paper:** [Link to paper when published]  
-**Authors:**  Ayan Banerjee, Kuntal Prakash Thakur Sandeep Gupta  
+
+**Authors:**  Ayan Banerjee, Kuntal Thakur Sandeep Gupta  
 **Affiliation:** IMPACT Lab, Arizona State University
 
 ## Overview
