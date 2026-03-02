@@ -16,12 +16,7 @@ cd GenEval
 pip install -r requirements.txt
 ```
 
-## Datasets
-Download datasets:
-- **APTOS:** [Kaggle](https://www.kaggle.com/c/aptos2019-blindness-detection)
-- **EyePACS:** [Kaggle](https://www.kaggle.com/c/diabetic-retinopathy-detection)
-- **Messidor-1:** [Link]
-- **Messidor-2:** [Link]
+
 
 See `docs/DATASETS.md` for details.
 
