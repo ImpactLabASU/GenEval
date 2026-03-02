@@ -60,11 +60,12 @@ https://www.dropbox.com/scl/fo/e51mect061togeqdwq2wg/ALCG9_9IPHLExKlpghC_6ks?rlk
 
 ## Citation
 ```bibtex
-@inproceedings{geneval2026,
-  title={GenEval: Multi-Modal Single-Source Domain Generalization for Medical Imaging},
-  author={[Names]},
-  booktitle={WACV},
-  year={2026}
+@inproceedings{banerjee2026_humanknowledge,
+  title={Human Knowledge Integrated Multi-modal Learning for Single Source Domain Generalization},
+  author={Banerjee, Ayan and Thakur, Kuntal and Gupta, Sandeep},
+  booktitle={Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  year={2026},
+  url={https://openaccess.thecvf.com/content/WACV2026/html/Banerjee_Human_Knowledge_Integrated_Multi-modal_Learning_for_Single_Source_Domain_Generalization_WACV_2026_paper.html}
 }
 ```
 
