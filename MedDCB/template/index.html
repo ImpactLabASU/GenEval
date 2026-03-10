@@ -1,0 +1,2340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Domain Conformal Bounds Analysis Tool - Upload two datasets to determine ideal source and target domains">
+    <title>Domain Conformal Bounds Analysis</title>
+    <!-- why: lightweight charting for bounds + coverage visuals -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-start: #0a0e1a;
+            --bg-end: #111827;
+            --accent-start: #6f88a8;
+            --accent-end: #86a0bf;
+            --card-bg: rgba(17, 24, 39, 0.95);
+            --stroke: rgba(59, 130, 246, 0.15);
+            --text-primary: #f0f9ff;
+            --text-secondary: #93c5fd;
+            --toggle-bg: rgba(148, 163, 184, 0.14);
+            --toggle-border: rgba(148, 163, 184, 0.28);
+            --toggle-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+            --accent-pop: #9ab2cf;
+            /* why: shared green-teal gradient for all action buttons */
+            --btn-gradient: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+            --btn-gradient-hover: linear-gradient(135deg, #4df58f 0%, #14b8a0 100%);
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            padding: 48px 24px 60px;
+            /* why: boost readability; what: bump base font + relaxed line height */
+            font-size: 1.05rem;
+            line-height: 1.65;
+            background: radial-gradient(circle at 25% 20%, rgba(59, 130, 246, 0.15), transparent 45%),
+                        radial-gradient(circle at 80% 0%, rgba(96, 165, 250, 0.12), transparent 50%),
+                        linear-gradient(135deg, var(--bg-start), var(--bg-end));
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image: linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+        }
+        /* why: keep theme toggle at page top-right; what: stays in document flow and scrolls away */
+        .theme-toggle {
+            position: absolute;
+            top: 4px;
+            right: 12px;
+            left: auto;
+            z-index: 20;
+        }
+        .theme-toggle-btn {
+            width: auto;
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: 1px solid var(--toggle-border);
+            background: var(--toggle-bg);
+            color: var(--text-primary);
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            box-shadow: var(--toggle-shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            appearance: none;
+        }
+        .theme-toggle-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.22);
+        }
+        .theme-toggle-btn:focus-visible {
+            outline: 2px solid rgba(148, 163, 184, 0.5);
+            outline-offset: 2px;
+        }
+        .app-shell {
+            width: min(1100px, 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            position: relative;
+            z-index: 1;
+        }
+        .hero {
+            background: rgba(17, 24, 39, 0.92);
+            border: 1px solid var(--stroke);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow: 0 25px 60px rgba(59, 130, 246, 0.15), 0 10px 40px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(22px);
+        }
+        h1 {
+            font-size: clamp(2.4rem, 3.8vw, 3.4rem);
+            margin-top: 0;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            margin-top: 12px;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+        .glass-form {
+            background: var(--card-bg);
+            border: 1px solid var(--stroke);
+            border-radius: 24px;
+            padding: 32px;
+            backdrop-filter: blur(18px);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.55);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+        .step-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+        .step-card {
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            padding: 18px;
+            background: rgba(17, 24, 39, 0.9);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .step-card.active {
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.2), 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+        .step-card.ready {
+            border-color: rgba(96, 165, 250, 0.6);
+        }
+        .step-card.locked {
+            opacity: 0.65;
+        }
+        .step-pill {
+            align-self: flex-start;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .step-pill.live {
+            background: rgba(59, 130, 246, 0.2);
+        }
+        .step-copy {
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .pipeline-run {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding-top: 2px;
+        }
+        .pipeline-run__copy {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            line-height: 1.4;
+            max-width: 560px;
+        }
+        .pipeline-run > button#thetaBtn {
+            width: min(460px, 100%);
+        }
+        /* why: side-by-side dataset columns; what: equal-width responsive grid */
+        .datasets-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        @media (max-width: 700px) {
+            .datasets-row { grid-template-columns: 1fr; }
+        }
+        .dataset-section {
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 18px;
+            padding: 22px;
+            background: rgba(17, 24, 39, 0.85);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .section-label {
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #93c5fd;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .input-group > label {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        /* why: folder drop zone is the sole input; what: large drag target */
+        .drop-zone {
+            position: relative;
+            width: 100%;
+            min-height: 160px;
+            border-radius: 16px;
+            border: 2px dashed rgba(59, 130, 246, 0.4);
+            background: rgba(59, 130, 246, 0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 28px 20px;
+            cursor: default;
+            transition: border-color 0.2s, background 0.2s, transform 0.15s;
+            text-align: center;
+        }
+        .drop-zone.drag-over {
+            border-color: rgba(96, 165, 250, 0.85);
+            background: rgba(59, 130, 246, 0.14);
+            transform: scale(1.01);
+        }
+        .drop-zone.has-files {
+            border-color: rgba(74, 222, 128, 0.6);
+            background: rgba(74, 222, 128, 0.06);
+            border-style: solid;
+        }
+        .drop-zone.error-state {
+            border-color: rgba(239, 68, 68, 0.6);
+            background: rgba(239, 68, 68, 0.05);
+        }
+        .drop-zone__icon { font-size: 2.4rem; line-height: 1; }
+        .drop-zone__primary { font-weight: 600; font-size: 1rem; color: var(--text-primary); }
+        .drop-zone__sub { font-size: 0.82rem; color: var(--text-secondary); }
+        /* why: show detected CSV + image count after drop; what: small tag chips */
+        .dz-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+            margin-top: 4px;
+        }
+        .dz-tag {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .dz-tag--csv { background: rgba(96,165,250,0.2); color: #93c5fd; border: 1px solid rgba(96,165,250,0.35); }
+        .dz-tag--img { background: rgba(74,222,128,0.15); color: #86efac; border: 1px solid rgba(74,222,128,0.3); }
+        .dz-tag--err { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        :root[data-theme="light"] .dz-tag--csv { color: #1d4ed8; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.3); }
+        :root[data-theme="light"] .dz-tag--img { color: #15803d; background: rgba(22,163,74,0.1); border-color: rgba(22,163,74,0.3); }
+        :root[data-theme="light"] .dz-tag--err { color: #b91c1c; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); }
+        :root[data-theme="light"] .drop-zone {
+            border-color: rgba(59, 130, 246, 0.4);
+            background: rgba(59, 130, 246, 0.04);
+        }
+        :root[data-theme="light"] .drop-zone.drag-over {
+            border-color: rgba(37, 99, 235, 0.7);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        :root[data-theme="light"] .drop-zone.has-files {
+            border-color: rgba(22, 163, 74, 0.6);
+            background: rgba(22, 163, 74, 0.05);
+        }
+        .helper-text {
+            margin-top: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        /* why: make upload feedback simple; what: one clear progress bar + concise labels */
+        .upload-counter {
+            margin-top: 10px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.24);
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.6));
+            animation: counterFade 0.25s ease forwards;
+        }
+        .upload-counter.active {
+            display: flex;
+        }
+        .upload-counter__header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .upload-counter__count {
+            font-size: 1.2rem;
+            line-height: 1;
+            font-weight: 700;
+            color: #e2e8f0;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.01em;
+        }
+        .upload-counter__label {
+            font-size: 0.8rem;
+            color: #bfdbfe;
+            letter-spacing: 0.02em;
+            font-weight: 600;
+            text-transform: none;
+        }
+        .upload-counter__track {
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.28);
+            overflow: hidden;
+        }
+        .upload-counter__fill {
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 100%);
+            transition: width 0.35s ease;
+        }
+        .upload-counter__status {
+            font-size: 0.75rem;
+            color: #cbd5e1;
+        }
+        .upload-counter.is-uploading .upload-counter__fill {
+            background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 60%, #38bdf8 100%);
+            background-size: 180% 100%;
+            animation: uploadShift 1.1s linear infinite;
+        }
+        .upload-counter.is-uploaded .upload-counter__fill {
+            background: linear-gradient(90deg, #22c55e 0%, #4ade80 100%);
+            animation: none;
+        }
+        .upload-counter.is-uploaded .upload-counter__label {
+            color: #86efac;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            border: 1px solid rgba(191, 219, 254, 0.16);
+            border-radius: 14px;
+            background: var(--accent-start);
+            color: #f8fbff;
+            font-weight: 600;
+            font-size: 1.05rem;
+            cursor: pointer;
+            /* why: quieter shadow keeps actions clear without eye strain */
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        /* why: green-teal gradient powers the single Run action */
+        button#thetaBtn {
+            position: relative;
+            overflow: hidden;
+            border-color: rgba(17, 153, 142, 0.5);
+            background: var(--btn-gradient);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 10px 24px rgba(17, 153, 142, 0.25);
+            letter-spacing: 0.02em;
+        }
+        button#thetaBtn::before {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background: linear-gradient(115deg, rgba(255, 255, 255, 0.2), transparent 34%, transparent 66%, rgba(167, 243, 208, 0.15));
+            opacity: 0.9;
+            pointer-events: none;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.22);
+        }
+        button#thetaBtn:hover:not(:disabled) {
+            background: var(--btn-gradient-hover);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 14px 30px rgba(17, 153, 142, 0.3);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        /* why: surface folder schema help inline; what: collapsible hints */
+        .sample-hint {
+            margin-top: 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.02);
+            padding: 12px 14px;
+        }
+        .sample-hint summary {
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sample-hint pre {
+            margin-top: 10px;
+            border-radius: 8px;
+            padding: 12px;
+            background: rgba(0,0,0,0.45);
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+        .status-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        /* why: keep progress board visible pre-run; what: fade when idle */
+        .progress-board {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding: 24px;
+            border-radius: 18px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: rgba(17, 24, 39, 0.92);
+            opacity: 0.65;
+            transition: opacity 0.2s ease;
+        }
+        .progress-board.active {
+            opacity: 1;
+        }
+        .progress-header {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .progress-header p {
+            margin: 0;
+        }
+        .job-log {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .dataset-progress {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+        .dataset-card {
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: 16px;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.85);
+        }
+        .dataset-card__title {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-weight: 600;
+            margin-bottom: 12px;
+            gap: 6px;
+        }
+        .dataset-card__title span {
+            text-align: center;
+        }
+        .dataset-card__count {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.15);
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-start);
+            transition: width 0.4s ease;
+        }
+        .dataset-card:last-child .progress-fill {
+            background: var(--accent-end);
+        }
+        .last-image {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .error,
+        .results {
+            padding: 20px;
+            border-radius: 18px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: rgba(17, 24, 39, 0.85);
+            display: none;
+        }
+        .error.active,
+        .results.active {
+            display: block;
+        }
+        .error {
+            color: #f9d4cf;
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+        .results {
+            border-color: rgba(59, 130, 246, 0.35);
+        }
+        .results-heading {
+            text-align: center;
+            font-size: 1rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: #93c5fd;
+            margin-bottom: 12px;
+        }
+        .result-shell {
+            padding: 10px;
+            border-radius: 20px;
+            background: linear-gradient(145deg, rgba(17, 24, 39, 0.9), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            box-shadow: 0 25px 45px rgba(59, 130, 246, 0.15), 0 15px 35px rgba(0, 0, 0, 0.5);
+        }
+        .result-section {
+            margin-bottom: 10px;
+        }
+        .result-header {
+            font-size: 1.8rem;
+            letter-spacing: 0.02em;
+            font-weight: 600;
+            color: #f8f6f1;
+        }
+        .bounds-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+        .bound-card {
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+        .bound-card strong {
+            display: block;
+            color: #93c5fd;
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .bound-card__value {
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        .coverage-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .coverage-card {
+            padding: 16px 18px;
+            border-radius: 16px;
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+        .coverage-card strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #93c5fd;
+        }
+        .coverage-card span {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+        .recommendation {
+            border-radius: 18px;
+            padding: 24px;
+            margin-top: 8px;
+            background: linear-gradient(125deg, rgba(59, 130, 246, 0.15), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .recommendation__label {
+            font-size: 0.85rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #bfdbfe;
+        }
+        .recommendation__winner {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+            color: #ffffff;
+        }
+        .recommendation__reason {
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #e0f2fe;
+        }
+        .recommendation__reason strong {
+            color: #ffffff;
+        }
+        .result-highlight {
+            margin-top: 16px;
+            padding: 18px;
+            border-radius: 16px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(96, 165, 250, 0.4);
+            color: #f0f9ff;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .result-summary {
+            margin-bottom: 20px;
+            padding: 18px 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(59, 130, 246, 0.08);
+        }
+        .summary-headline {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .summary-pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            font-size: 0.85rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .summary-coverage {
+            font-size: 1.9rem;
+            font-weight: 600;
+        }
+        .summary-decision {
+            margin: 0 0 8px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #f8fafc;
+            line-height: 1.25;
+        }
+        .summary-copy {
+            margin: 0;
+            color: var(--text-secondary);
+            line-height: 1.45;
+        }
+        /* why: chart visuals alongside numeric cards; what: responsive chart grid */
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .chart-box {
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            background: rgba(15, 23, 42, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .chart-box__title {
+            font-size: 0.9rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #93c5fd;
+            text-align: center;
+        }
+        .chart-box canvas {
+            max-width: 100%;
+        }
+        :root[data-theme="light"] .chart-box {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(239,246,255,0.9));
+            border-color: rgba(59,130,246,0.3);
+        }
+        :root[data-theme="light"] .chart-box__title {
+            color: #1e40af;
+        }
+        @media (max-width: 640px) {
+            .chart-row { grid-template-columns: 1fr; }
+        }
+        .result-actions {
+            margin-top: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .ghost-btn {
+            width: auto;
+            padding: 12px 18px;
+            border-radius: 12px;
+            background: rgba(56, 239, 125, 0.12);
+            border: 1px solid rgba(17, 153, 142, 0.5);
+            color: #5eead4;
+            font-size: 0.9rem;
+            box-shadow: none;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .ghost-btn:hover:not(:disabled) {
+            background: var(--btn-gradient);
+            border-color: rgba(17, 153, 142, 0.7);
+            color: #fff;
+        }
+        .ghost-btn:disabled {
+            opacity: 0.5;
+        }
+        @keyframes thetaPulse {
+            0% { box-shadow: 0 0 0 rgba(59, 130, 246, 0); }
+            50% { box-shadow: 0 0 18px rgba(59, 130, 246, 0.35); }
+            100% { box-shadow: 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        @keyframes counterFade {
+            0% { opacity: 0; transform: translateY(6px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes uploadShift {
+            0% { background-position: 100% 0; }
+            100% { background-position: 0 0; }
+        }
+        :root[data-theme="light"] {
+            --bg-start: #f0f7ff;
+            --bg-end: #dbeafe;
+            --accent-start: #6a84a3;
+            --accent-end: #819cbc;
+            --card-bg: rgba(255, 255, 255, 0.96);
+            --stroke: rgba(37, 99, 235, 0.2);
+            --text-primary: #0f172a;
+            --text-secondary: #1e40af;
+            --toggle-bg: rgba(100, 116, 139, 0.08);
+            --toggle-border: rgba(100, 116, 139, 0.24);
+            --toggle-shadow: 0 10px 20px rgba(100, 116, 139, 0.12);
+            --surface-1: rgba(255, 255, 255, 0.97);
+            --surface-2: rgba(248, 250, 255, 0.95);
+            --surface-3: rgba(241, 245, 254, 0.9);
+            --surface-iris: rgba(59, 130, 246, 0.12);
+            --surface-cyan: rgba(37, 99, 235, 0.08);
+            --shadow-light: 0 30px 55px rgba(59, 130, 246, 0.15);
+            --border-strong: rgba(59, 130, 246, 0.25);
+        }
+        /* why: light mode needed its own vibe; what: pastel blue gradients with airy shadows */
+        :root[data-theme="light"] body {
+            background: radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.15), transparent 45%),
+                        radial-gradient(circle at 80% 0%, rgba(96, 165, 250, 0.18), transparent 50%),
+                        linear-gradient(135deg, var(--bg-start), var(--bg-end));
+            color: var(--text-primary);
+        }
+        :root[data-theme="light"] .hero,
+        :root[data-theme="light"] .glass-form {
+            background: linear-gradient(140deg, var(--surface-1), rgba(248, 250, 255, 0.95)) padding-box,
+                        linear-gradient(140deg, rgba(59, 130, 246, 0.25), rgba(96, 165, 250, 0.2)) border-box;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 20px 50px rgba(59, 130, 246, 0.12), 0 10px 30px rgba(0, 0, 0, 0.05);
+            color: var(--text-primary);
+        }
+        :root[data-theme="light"] .step-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(239, 246, 255, 0.9));
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 0 16px 32px rgba(59, 130, 246, 0.08);
+        }
+        :root[data-theme="light"] .step-card.active {
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 20px 45px rgba(59, 130, 246, 0.15), 0 8px 24px rgba(37, 99, 235, 0.1);
+        }
+        :root[data-theme="light"] .step-pill {
+            background: linear-gradient(120deg, rgba(59, 130, 246, 0.15), rgba(96, 165, 250, 0.12));
+            border-color: rgba(59, 130, 246, 0.4);
+            color: var(--text-secondary);
+        }
+        :root[data-theme="light"] .dataset-section,
+        :root[data-theme="light"] .progress-board,
+        :root[data-theme="light"] .dataset-card {
+            background: linear-gradient(135deg, var(--surface-2), rgba(239, 246, 255, 0.95));
+            border-color: rgba(59, 130, 246, 0.25);
+            color: var(--text-primary);
+            box-shadow: 0 20px 40px rgba(59, 130, 246, 0.08);
+        }
+        :root[data-theme="light"] .progress-board {
+            background: linear-gradient(135deg, var(--surface-2), rgba(239, 246, 255, 0.95));
+        }
+        :root[data-theme="light"] .progress-bar {
+            background: rgba(59, 130, 246, 0.15);
+        }
+        :root[data-theme="light"] button {
+            background: var(--accent-start);
+            color: white;
+        }
+        :root[data-theme="light"] button#thetaBtn {
+            background: var(--btn-gradient);
+            border-color: rgba(17, 153, 142, 0.55);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 12px 24px rgba(17, 153, 142, 0.22);
+        }
+        :root[data-theme="light"] button#thetaBtn:hover:not(:disabled) {
+            background: var(--btn-gradient-hover);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 16px 30px rgba(17, 153, 142, 0.28);
+        }
+        :root[data-theme="light"] .progress-fill {
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3);
+        }
+        :root[data-theme="light"] .dataset-card:last-child .progress-fill {
+            background: var(--accent-end);
+        }
+        :root[data-theme="light"] input[type="file"] {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: rgba(59, 130, 246, 0.25);
+            color: var(--text-primary);
+        }
+        :root[data-theme="light"] .upload-counter {
+            border-color: rgba(59, 130, 246, 0.25);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(239, 246, 255, 0.82));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 10px 20px rgba(59, 130, 246, 0.12);
+        }
+        :root[data-theme="light"] .upload-counter__count {
+            color: #1e3a8a;
+            text-shadow: none;
+        }
+        :root[data-theme="light"] .upload-counter__label {
+            color: #1e40af;
+        }
+        :root[data-theme="light"] .upload-counter__status {
+            color: #334155;
+        }
+        :root[data-theme="light"] .upload-counter__track {
+            background: rgba(148, 163, 184, 0.24);
+        }
+        :root[data-theme="light"] .upload-counter.is-uploading .upload-counter__fill {
+            background: linear-gradient(90deg, #60a5fa 0%, #2563eb 60%, #60a5fa 100%);
+            background-size: 180% 100%;
+        }
+        :root[data-theme="light"] .upload-counter.is-uploaded .upload-counter__fill {
+            background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+        }
+        :root[data-theme="light"] .upload-counter.is-uploaded .upload-counter__label {
+            color: #15803d;
+        }
+        :root[data-theme="light"] .sample-hint {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.95));
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+        :root[data-theme="light"] .sample-hint pre {
+            background: rgba(239, 246, 255, 0.95);
+            color: var(--text-primary);
+        }
+        :root[data-theme="light"] .results,
+        :root[data-theme="light"] .result-shell,
+        :root[data-theme="light"] .result-summary,
+        :root[data-theme="light"] .recommendation,
+        :root[data-theme="light"] .result-highlight {
+            background: var(--surface-2);
+            border-color: rgba(59, 130, 246, 0.3);
+            color: var(--text-primary);
+            box-shadow: 0 20px 50px rgba(59, 130, 246, 0.1);
+        }
+        :root[data-theme="light"] .recommendation {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(96, 165, 250, 0.12), rgba(255, 255, 255, 0.95));
+        }
+        :root[data-theme="light"] .result-highlight {
+            background: linear-gradient(135deg, rgba(96, 165, 250, 0.18), rgba(59, 130, 246, 0.15), rgba(255, 255, 255, 0.95));
+        }
+        :root[data-theme="light"] .coverage-card,
+        :root[data-theme="light"] .bound-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(239, 246, 255, 0.9));
+            border-color: rgba(59, 130, 246, 0.35);
+        }
+        :root[data-theme="light"] .result-header,
+        :root[data-theme="light"] .bound-card__value,
+        :root[data-theme="light"] .coverage-card span,
+        :root[data-theme="light"] .result-summary .summary-coverage,
+        :root[data-theme="light"] .result-summary .summary-decision,
+        :root[data-theme="light"] .result-summary .summary-copy,
+        :root[data-theme="light"] .recommendation__label,
+        :root[data-theme="light"] .recommendation__winner,
+        :root[data-theme="light"] .recommendation__reason,
+        :root[data-theme="light"] .recommendation p,
+        :root[data-theme="light"] .result-highlight,
+        :root[data-theme="light"] .result-highlight strong {
+            color: var(--text-primary);
+        }
+        :root[data-theme="light"] .theme-toggle-btn {
+            background: var(--toggle-bg);
+            border-color: var(--toggle-border);
+            color: var(--text-secondary);
+            box-shadow: var(--toggle-shadow);
+        }
+        :root[data-theme="light"] .theme-toggle-btn:hover {
+            box-shadow: 0 10px 22px rgba(100, 116, 139, 0.15);
+        }
+        :root[data-theme="light"] .ghost-btn {
+            background: rgba(56, 239, 125, 0.15);
+            border-color: rgba(17, 153, 142, 0.55);
+            color: #0d9488;
+        }
+        :root[data-theme="light"] .ghost-btn:hover:not(:disabled) {
+            background: var(--btn-gradient);
+            border-color: rgba(17, 153, 142, 0.7);
+            color: #fff;
+        }
+        :root[data-theme="light"] .error {
+            background: rgba(254, 226, 226, 0.95);
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #7f1d1d;
+            box-shadow: 0 12px 28px rgba(239, 68, 68, 0.2);
+        }
+        :root[data-theme="light"] .section-label {
+            color: #1e40af;
+        }
+        :root[data-theme="light"] .results-heading {
+            color: #2563eb;
+        }
+        :root[data-theme="light"] .bound-card strong,
+        :root[data-theme="light"] .coverage-card strong {
+            color: #1e40af;
+        }
+        /* why: visual-only verdict replaces all text cards; what: animated bars + winner glow */
+        .verdict {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 22px 24px;
+            border-radius: 18px;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            background: rgba(15, 23, 42, 0.88);
+        }
+        .verdict-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 4px 0;
+            opacity: 0.5;
+            transition: opacity 0.4s ease;
+        }
+        .verdict-row.winner { opacity: 1; }
+        .verdict-label {
+            font-size: 0.9rem;
+            font-weight: 700;
+            min-width: 50px;
+            text-align: right;
+            letter-spacing: 0.02em;
+        }
+        .verdict-track {
+            flex: 1;
+            height: 30px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.08);
+            overflow: hidden;
+        }
+        .verdict-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: var(--accent-start);
+            transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .verdict-row.winner .verdict-fill {
+            background: var(--btn-gradient);
+            box-shadow: 0 0 18px rgba(56, 239, 125, 0.25);
+        }
+        .verdict-pct {
+            min-width: 98px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            line-height: 1.05;
+        }
+        .verdict-metric {
+            font-size: 0.66rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .verdict-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .verdict-row.winner .verdict-value { color: #4ade80; }
+        .verdict-rec {
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 600;
+            padding-top: 8px;
+            border-top: 1px solid rgba(59, 130, 246, 0.12);
+            letter-spacing: 0.02em;
+        }
+        .verdict-rec .vr-arrow { color: #4ade80; font-size: 1.15rem; }
+        /* why: show benchmark evidence after recommendation; what: compact table + validation note */
+        .geneval-block {
+            margin-top: 12px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(59, 130, 246, 0.16);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .geneval-title {
+            text-align: center;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #bfdbfe;
+        }
+        .geneval-caption {
+            text-align: center;
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-top: -2px;
+        }
+        .geneval-scroll {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.22);
+        }
+        .geneval-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 520px;
+            background: rgba(15, 23, 42, 0.4);
+        }
+        .geneval-table th,
+        .geneval-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.14);
+            font-size: 0.92rem;
+            text-align: left;
+        }
+        .geneval-table th {
+            color: #bfdbfe;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: 0.78rem;
+        }
+        .geneval-table td:last-child,
+        .geneval-table td:nth-last-child(2) {
+            font-variant-numeric: tabular-nums;
+        }
+        .geneval-table tbody tr.is-best {
+            background: rgba(56, 239, 125, 0.12);
+        }
+        .geneval-note {
+            font-size: 0.92rem;
+            line-height: 1.45;
+            color: #e2e8f0;
+            text-align: center;
+        }
+        .geneval-note strong {
+            color: #4ade80;
+        }
+        .chart-box.winner {
+            border-color: rgba(74, 222, 128, 0.5);
+            box-shadow: 0 8px 28px rgba(74, 222, 128, 0.14);
+        }
+        :root[data-theme="light"] .verdict {
+            background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.92));
+            border-color: rgba(59,130,246,0.3);
+        }
+        :root[data-theme="light"] .verdict-row.winner .verdict-value { color: #16a34a; }
+        :root[data-theme="light"] .verdict-rec .vr-arrow { color: #16a34a; }
+        :root[data-theme="light"] .geneval-title {
+            color: #1e3a8a;
+        }
+        :root[data-theme="light"] .geneval-caption {
+            color: #1e40af;
+        }
+        :root[data-theme="light"] .geneval-scroll {
+            border-color: rgba(59, 130, 246, 0.28);
+        }
+        :root[data-theme="light"] .geneval-table {
+            background: rgba(255, 255, 255, 0.88);
+        }
+        :root[data-theme="light"] .geneval-table th {
+            color: #1e40af;
+        }
+        :root[data-theme="light"] .geneval-table th,
+        :root[data-theme="light"] .geneval-table td {
+            border-bottom-color: rgba(59, 130, 246, 0.16);
+        }
+        :root[data-theme="light"] .geneval-table tbody tr.is-best {
+            background: rgba(22, 163, 74, 0.1);
+        }
+        :root[data-theme="light"] .geneval-note {
+            color: #1e293b;
+        }
+        :root[data-theme="light"] .geneval-note strong {
+            color: #15803d;
+        }
+        :root[data-theme="light"] .chart-box.winner {
+            border-color: rgba(22, 163, 74, 0.5);
+            box-shadow: 0 8px 28px rgba(22, 163, 74, 0.14);
+        }
+        @media (max-width: 640px) {
+            body {
+                padding: 32px 16px 48px;
+            }
+            .hero,
+            .glass-form {
+                padding: 22px;
+            }
+            .dataset-section {
+                padding: 18px;
+            }
+            .verdict-pct { min-width: 84px; }
+            .verdict-value { font-size: 1.2rem; }
+            .verdict-track { height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button type="button" id="themeToggle" class="theme-toggle-btn" aria-pressed="false" aria-label="Toggle theme">Toggle theme</button>
+    </div>
+    <div class="app-shell">
+        <!-- why: hero mirrors Cursor AI landing style; what: sets tone + guidance -->
+        <header class="hero">
+            <h1>MedDCB: Will My Model Generalize?</h1>
+            <p class="subtitle">Select an image folder and a CSV label file for each dataset. Each folder uploads right away, then click Run to start θ extraction and SDCD computation.</p>
+        </header>
+
+        <form id="uploadForm" class="glass-form" enctype="multipart/form-data">
+            <!-- why: one drop zone per dataset; what: folder contains both images + CSV -->
+            <div class="datasets-row">
+                <section class="dataset-section">
+                    <span class="section-label">Dataset A</span>
+                    <div class="drop-zone" id="dropzone_dataset_a">
+                        <!-- why: hidden inputs hold files after drop; what: FormData picks them up on submit -->
+                        <div id="dz_a_inputs"></div>
+                        <span class="drop-zone__icon" id="dz_a_icon">📁</span>
+                        <span class="drop-zone__primary" id="dz_a_primary">Drop Dataset A folder here</span>
+                        <span class="drop-zone__sub">Folder must contain images + a CSV file</span>
+                        <div class="dz-tags" id="dz_a_tags"></div>
+                    </div>
+                    <div class="upload-counter" id="counter_dataset_a">
+                        <div class="upload-counter__header">
+                            <span class="upload-counter__label">No images selected</span>
+                            <span class="upload-counter__count" data-count="0">0</span>
+                        </div>
+                        <div class="upload-counter__track">
+                            <div class="upload-counter__fill"></div>
+                        </div>
+                        <span class="upload-counter__status">Waiting for folder</span>
+                    </div>
+                </section>
+
+                <section class="dataset-section">
+                    <span class="section-label">Dataset B</span>
+                    <div class="drop-zone" id="dropzone_dataset_b">
+                        <div id="dz_b_inputs"></div>
+                        <span class="drop-zone__icon" id="dz_b_icon">📁</span>
+                        <span class="drop-zone__primary" id="dz_b_primary">Drop Dataset B folder here</span>
+                        <span class="drop-zone__sub">Folder must contain images + a CSV file</span>
+                        <div class="dz-tags" id="dz_b_tags"></div>
+                    </div>
+                    <div class="upload-counter" id="counter_dataset_b">
+                        <div class="upload-counter__header">
+                            <span class="upload-counter__label">No images selected</span>
+                            <span class="upload-counter__count" data-count="0">0</span>
+                        </div>
+                        <div class="upload-counter__track">
+                            <div class="upload-counter__fill"></div>
+                        </div>
+                        <span class="upload-counter__status">Waiting for folder</span>
+                    </div>
+                </section>
+            </div>
+
+            <div class="step-grid">
+                <div class="step-card active" id="stepTheta">
+                    <div class="step-pill live" id="thetaPill">Step 1 • θ Conversion</div>
+                    <p class="step-copy" id="thetaCopy">Uploads both folders + labels, stages them, and extracts θ features.</p>
+                </div>
+                <div class="step-card locked" id="stepDcb">
+                    <div class="step-pill" id="dcbPill">Step 2 • SDCD Computation</div>
+                    <p class="step-copy" id="dcbCopy">Starts automatically after θ conversion finishes. Uses saved θ CSVs to compute SDCD scores.</p>
+                </div>
+            </div>
+            <div class="pipeline-run">
+                <p class="pipeline-run__copy">Folders upload on selection. Run starts the full pipeline once both uploads are complete.</p>
+                <button type="button" id="thetaBtn">Run</button>
+            </div>
+        </form>
+
+        <div class="status-stack">
+            <div class="progress-board" id="progressBoard">
+                <!-- why: mirror backend progress; what: per-dataset counters + theta ticker -->
+                <div class="progress-header">
+                    <p id="jobStatus">Awaiting upload…</p>
+                    <p class="job-log" id="jobLog">Drop both datasets to upload, then click Run to execute the pipeline.</p>
+                </div>
+                <div class="dataset-progress">
+                    <div class="dataset-card">
+                        <div class="dataset-card__title">
+                            <span>Dataset A</span>
+                            <span id="datasetACount" class="dataset-card__count">0/0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressA"></div>
+                        </div>
+                        <p class="last-image" id="imageA">Waiting for samples…</p>
+                    </div>
+                    <div class="dataset-card">
+                        <div class="dataset-card__title">
+                            <span>Dataset B</span>
+                            <span id="datasetBCount" class="dataset-card__count">0/0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressB"></div>
+                        </div>
+                        <p class="last-image" id="imageB">Waiting for samples…</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="error" id="error"></div>
+
+            <div class="results" id="results">
+                <div class="result-shell">
+                    <div class="chart-row">
+                        <div class="chart-box" id="chartBoxAB">
+                            <span class="chart-box__title">A → B</span>
+                            <canvas id="chartCovAB" height="270"></canvas>
+                        </div>
+                        <div class="chart-box" id="chartBoxBA">
+                            <span class="chart-box__title">B → A</span>
+                            <canvas id="chartCovBA" height="270"></canvas>
+                        </div>
+                    </div>
+                    <!-- why: visual-only verdict; what: coverage bars + winner glow replace all text -->
+                    <div class="verdict" id="verdict"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const THEME_STORAGE_KEY = 'dcb-theme';
+        const rootElement = document.documentElement;
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const storedTheme = (() => {
+            try {
+                return localStorage.getItem(THEME_STORAGE_KEY);
+            } catch {
+                return null;
+            }
+        })();
+        const defaultTheme = storedTheme || 'light';
+        applyTheme(defaultTheme);
+        themeToggle?.addEventListener('click', () => {
+            const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+            applyTheme(nextTheme);
+            try { localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch { /* ignore */ }
+            /* why: charts use hardcoded palette; what: repaint with new theme colors */
+            if (lastResultPayload) requestAnimationFrame(() => renderCharts(lastResultPayload));
+        });
+        function applyTheme(theme) {
+            rootElement.dataset.theme = theme;
+            if (!themeToggle) {
+                return;
+            }
+            const isDark = theme === 'dark';
+            themeToggle.textContent = isDark ? '☀️ Light mode' : '🌙 Dark mode';
+            themeToggle.setAttribute('aria-label', `Switch to ${isDark ? 'light' : 'dark'} mode`);
+            themeToggle.setAttribute('aria-pressed', String(isDark));
+        }
+        const form = document.getElementById('uploadForm');
+        const thetaBtn = document.getElementById('thetaBtn');
+        const stepTheta = document.getElementById('stepTheta');
+        const stepDcb = document.getElementById('stepDcb');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+        const progressBoard = document.getElementById('progressBoard');
+        const jobStatus = document.getElementById('jobStatus');
+        const jobLog = document.getElementById('jobLog');
+        const stepMessaging = {
+            theta: {
+                pill: document.getElementById('thetaPill'),
+                copy: document.getElementById('thetaCopy')
+            },
+            dcb: {
+                pill: document.getElementById('dcbPill'),
+                copy: document.getElementById('dcbCopy')
+            }
+        };
+        const datasetViews = {
+            A: { fill: document.getElementById('progressA'), count: document.getElementById('datasetACount'), image: document.getElementById('imageA') },
+            B: { fill: document.getElementById('progressB'), count: document.getElementById('datasetBCount'), image: document.getElementById('imageB') },
+        };
+        /* why: store collected files per dataset; what: used by FormData on submit */
+        const datasetFiles = { dataset_a: [], dataset_b: [] };
+        const datasetImageTotals = { dataset_a: 0, dataset_b: 0 };
+        const MAX_FILES_PER_UPLOAD_CHUNK = 400;
+        const uploadSession = {
+            id: null,
+            inFlight: { dataset_a: null, dataset_b: null },
+            complete: { dataset_a: false, dataset_b: false },
+            launching: false
+        };
+        const uploadCounters = {
+            dataset_a: bindUploadCounter('counter_dataset_a'),
+            dataset_b: bindUploadCounter('counter_dataset_b')
+        };
+        const boundsRootA = document.getElementById('bounds_a');
+        const boundsRootB = document.getElementById('bounds_b');
+        const coverageRoot = document.getElementById('coverage');
+        const recommendationPanel = document.getElementById('recommendation');
+        const resultHighlight = document.getElementById('resultHighlight');
+        const resultSummary = document.getElementById('resultSummary');
+        const altScenarioBtn = document.getElementById('altScenarioBtn');
+
+        /* why: single drop zone per dataset; what: folder contains images + CSV together */
+        const dropZoneCfg = {
+            dataset_a: {
+                zone: document.getElementById('dropzone_dataset_a'),
+                primary: document.getElementById('dz_a_primary'),
+                icon: document.getElementById('dz_a_icon'),
+                tags: document.getElementById('dz_a_tags'),
+            },
+            dataset_b: {
+                zone: document.getElementById('dropzone_dataset_b'),
+                primary: document.getElementById('dz_b_primary'),
+                icon: document.getElementById('dz_b_icon'),
+                tags: document.getElementById('dz_b_tags'),
+            },
+        };
+
+        Object.entries(dropZoneCfg).forEach(([key, cfg]) => {
+            const { zone } = cfg;
+            if (!zone) return;
+
+            /* why: hidden folder picker so clicking the drop zone opens system file browser */
+            const picker = document.createElement('input');
+            picker.type = 'file';
+            picker.webkitdirectory = true;
+            picker.multiple = true;
+            picker.style.display = 'none';
+            zone.appendChild(picker);
+            picker.addEventListener('change', () => {
+                if (picker.files.length) applyDatasetFiles(key, cfg, Array.from(picker.files));
+            });
+
+            zone.style.cursor = 'pointer';
+            zone.addEventListener('click', e => { if (e.target !== picker) picker.click(); });
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                const items = e.dataTransfer?.items;
+                if (!items) return;
+                collectFolderFiles(items).then(files => applyDatasetFiles(key, cfg, files));
+            });
+        });
+        function applyDatasetFiles(key, cfg, files) {
+            const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+            const imgFiles = files.filter(f => !f.name.toLowerCase().endsWith('.csv'));
+            const { zone, primary, icon, tags } = cfg;
+            const counterKey = key === 'dataset_a' ? 'dataset_a' : 'dataset_b';
+            tags.innerHTML = '';
+            if (!csvFiles.length || !imgFiles.length) {
+                abortDatasetUpload(counterKey);
+                zone.classList.add('error-state');
+                zone.classList.remove('has-files');
+                primary.textContent = 'Missing ' + (!csvFiles.length ? 'CSV file' : 'image files');
+                icon.textContent = '⚠️';
+                tags.innerHTML = `<span class="dz-tag dz-tag--err">Folder needs images + a CSV</span>`;
+                datasetFiles[key] = [];
+                datasetImageTotals[key] = 0;
+                uploadSession.complete[counterKey] = false;
+                setUploadCounterState(counterKey, 'selected', 0, 0);
+                refreshRunButtonAfterUploads();
+                return;
+            }
+            zone.classList.remove('error-state');
+            zone.classList.add('has-files');
+            // why: infer folder name from first file's relative path
+            const folderName = (files[0].webkitRelativePath || files[0].name).split('/')[0] || 'folder';
+            icon.textContent = '✅';
+            primary.textContent = `📂 ${folderName}`;
+            tags.innerHTML = `<span class="dz-tag dz-tag--csv">📄 ${csvFiles[0].name}</span><span class="dz-tag dz-tag--img">🖼 ${imgFiles.length.toLocaleString()} images</span>`;
+            datasetFiles[key] = files;
+            datasetImageTotals[key] = imgFiles.length;
+            uploadSession.complete[counterKey] = false;
+            // why: update chip immediately; what: show chosen folder totals before upload starts
+            handleFolderSelection(counterKey, imgFiles);
+            setStepMessaging('theta', {
+                pill: 'Step 1 • Uploading Datasets',
+                copy: 'Uploading selected folder now. Drop the second dataset to stage it too.'
+            });
+            setStepMessaging('dcb', {
+                pill: 'Step 2 • SDCD Locked',
+                copy: 'Starts automatically after θ conversion.'
+            });
+            refreshRunButtonAfterUploads();
+            startDatasetUpload(counterKey).then(ok => {
+                if (!ok) return;
+                if (uploadSession.complete.dataset_a && uploadSession.complete.dataset_b) {
+                    setStepMessaging('theta', {
+                        pill: 'Step 1 • Upload Complete',
+                        copy: 'Both datasets uploaded. Click Run to start θ conversion.'
+                    });
+                } else {
+                    const pending = uploadSession.complete.dataset_a ? 'Dataset B' : 'Dataset A';
+                    setStepMessaging('theta', {
+                        pill: 'Step 1 • Uploading Datasets',
+                        copy: `${pending} is still pending upload.`
+                    });
+                }
+            });
+        }
+
+        function createUploadSessionId() {
+            if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+            return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        function ensureUploadSessionId() {
+            if (!uploadSession.id) {
+                uploadSession.id = createUploadSessionId();
+            }
+            return uploadSession.id;
+        }
+
+        function abortDatasetUpload(key) {
+            const inflight = uploadSession.inFlight[key];
+            if (!inflight) return;
+            if (typeof inflight.abort === 'function') {
+                inflight.abort();
+            }
+            uploadSession.inFlight[key] = null;
+        }
+
+        function parseJsonResponse(xhr) {
+            if (xhr.response && typeof xhr.response === 'object') return xhr.response;
+            if (!xhr.responseText) return {};
+            try {
+                return JSON.parse(xhr.responseText);
+            } catch {
+                return {};
+            }
+        }
+
+        function refreshRunButtonAfterUploads() {
+            if (currentJobId || uploadSession.launching) {
+                setButtonState({ disabled: true, label: 'Running…' });
+                return;
+            }
+            const uploading = Boolean(uploadSession.inFlight.dataset_a || uploadSession.inFlight.dataset_b);
+            if (uploading) {
+                setButtonState({ disabled: true, label: 'Uploading…' });
+                return;
+            }
+            const readyToRun = validateUploads().ok;
+            setButtonState({ disabled: !readyToRun, label: 'Run' });
+        }
+
+        function buildUploadChunks(files) {
+            const csvFile = files.find(f => f.name.toLowerCase().endsWith('.csv'));
+            const imageFiles = files.filter(f => !f.name.toLowerCase().endsWith('.csv'));
+            if (!csvFile || !imageFiles.length) {
+                return [];
+            }
+            const chunkSize = Math.max(1, Number(MAX_FILES_PER_UPLOAD_CHUNK) || 1);
+            const chunks = [];
+            for (let i = 0; i < imageFiles.length; i += chunkSize) {
+                const chunkImages = imageFiles.slice(i, i + chunkSize);
+                const chunkFiles = chunkImages.slice();
+                if (i === 0) {
+                    chunkFiles.push(csvFile);
+                }
+                chunks.push({
+                    files: chunkFiles,
+                    imageCount: chunkImages.length
+                });
+            }
+            return chunks;
+        }
+
+        function makeAbortError() {
+            const err = new Error('Upload aborted');
+            err.aborted = true;
+            return err;
+        }
+
+        function uploadDatasetChunk({
+            key,
+            sessionId,
+            uploadId,
+            chunk,
+            chunkIndex,
+            totalChunks,
+            totalImages,
+            uploadedImagesBase,
+            task
+        }) {
+            return new Promise((resolve, reject) => {
+                if (task.aborted) {
+                    reject(makeAbortError());
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('upload_id', uploadId);
+                formData.append('chunk_index', String(chunkIndex));
+                formData.append('total_chunks', String(totalChunks));
+                chunk.files.forEach(file => {
+                    formData.append('dataset_folder', file, file.webkitRelativePath || file.name);
+                });
+                const xhr = new XMLHttpRequest();
+                xhr._silentAbort = false;
+                task.xhr = xhr;
+                xhr.open('POST', `/upload/${encodeURIComponent(sessionId)}/${key}`);
+                xhr.responseType = 'json';
+                xhr.upload.onprogress = (evt) => {
+                    if (!evt.lengthComputable || !evt.total) return;
+                    const ratio = Math.max(0, Math.min(1, evt.loaded / evt.total));
+                    const chunkProcessed = Math.round(chunk.imageCount * ratio);
+                    const processed = Math.min(totalImages, uploadedImagesBase + chunkProcessed);
+                    setUploadCounterState(key, 'uploading', totalImages, processed);
+                };
+                xhr.onload = () => {
+                    task.xhr = null;
+                    if (xhr._silentAbort || task.aborted) {
+                        reject(makeAbortError());
+                        return;
+                    }
+                    const data = parseJsonResponse(xhr);
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(data || {});
+                        return;
+                    }
+                    reject(new Error(data.error || `Upload failed (${xhr.status})`));
+                };
+                xhr.onerror = () => {
+                    task.xhr = null;
+                    reject(new Error('Upload failed. Check your connection and retry.'));
+                };
+                xhr.onabort = () => {
+                    task.xhr = null;
+                    reject(makeAbortError());
+                };
+                xhr.send(formData);
+            });
+        }
+
+        async function startDatasetUpload(key) {
+            const files = datasetFiles[key] || [];
+            if (!files.length) return false;
+
+            const totalImages = datasetImageTotals[key] || files.filter(f => !f.name.toLowerCase().endsWith('.csv')).length;
+            if (!totalImages) return false;
+
+            const chunks = buildUploadChunks(files);
+            if (!chunks.length) return false;
+
+            abortDatasetUpload(key);
+            uploadSession.complete[key] = false;
+            error.classList.remove('active');
+            refreshRunButtonAfterUploads();
+
+            const sessionId = ensureUploadSessionId();
+            const uploadId = createUploadSessionId();
+            const task = {
+                aborted: false,
+                xhr: null,
+                abort() {
+                    this.aborted = true;
+                    const activeXhr = this.xhr;
+                    if (!activeXhr) return;
+                    activeXhr._silentAbort = true;
+                    try {
+                        activeXhr.abort();
+                    } catch {
+                        // no-op
+                    }
+                }
+            };
+
+            uploadSession.inFlight[key] = task;
+            setUploadCounterState(key, 'uploading', totalImages, 0);
+
+            let uploadedImages = 0;
+            let lastPayload = null;
+            try {
+                for (let index = 0; index < chunks.length; index += 1) {
+                    if (task.aborted) {
+                        throw makeAbortError();
+                    }
+                    const chunk = chunks[index];
+                    const payload = await uploadDatasetChunk({
+                        key,
+                        sessionId,
+                        uploadId,
+                        chunk,
+                        chunkIndex: index,
+                        totalChunks: chunks.length,
+                        totalImages,
+                        uploadedImagesBase: uploadedImages,
+                        task
+                    });
+                    uploadedImages = Math.min(totalImages, uploadedImages + chunk.imageCount);
+                    setUploadCounterState(key, 'uploading', totalImages, uploadedImages);
+                    lastPayload = payload;
+                }
+
+                if (task.aborted) {
+                    throw makeAbortError();
+                }
+                const completedTotal = Number(lastPayload?.total_images) || totalImages;
+                datasetImageTotals[key] = completedTotal;
+                totalsCache[key] = completedTotal;
+                uploadSession.complete[key] = true;
+                setUploadCounterState(key, 'uploaded', completedTotal, completedTotal);
+                if (uploadSession.complete.dataset_a && uploadSession.complete.dataset_b) {
+                    setStepMessaging('theta', {
+                        pill: 'Step 1 • Upload Complete',
+                        copy: 'Both datasets uploaded. Ready to run θ conversion.'
+                    });
+                    setStepMessaging('dcb', {
+                        pill: 'Step 2 • SDCD Locked',
+                        copy: 'Will start automatically after θ conversion.'
+                    });
+                }
+                return true;
+            } catch (err) {
+                const isCurrentTask = uploadSession.inFlight[key] === task;
+                if (isCurrentTask) {
+                    uploadSession.complete[key] = false;
+                    setUploadCounterState(key, 'selected', totalImages, 0);
+                }
+                if (!err?.aborted && isCurrentTask) {
+                    error.textContent = `Error: ${err.message || 'Upload failed'}`;
+                    error.classList.add('active');
+                }
+                return false;
+            } finally {
+                if (uploadSession.inFlight[key] === task) {
+                    uploadSession.inFlight[key] = null;
+                }
+                refreshRunButtonAfterUploads();
+            }
+        }
+
+        /* why: FileSystemEntry API for recursive folder traversal; what: collect all files with relative paths */
+        async function collectFolderFiles(items) {
+            const files = [];
+            const traverse = (entry, path) => new Promise(resolve => {
+                if (entry.isFile) {
+                    entry.getFile(f => {
+                        Object.defineProperty(f, 'webkitRelativePath', { value: path + f.name, writable: false });
+                        files.push(f);
+                        resolve();
+                    }, resolve);
+                } else if (entry.isDirectory) {
+                    const reader = entry.createReader();
+                    const readAll = () => new Promise(res => {
+                        reader.readEntries(async entries => {
+                            if (!entries.length) return res();
+                            await Promise.all(entries.map(e => traverse(e, path + entry.name + '/')));
+                            readAll().then(res);
+                        }, res);
+                    });
+                    readAll().then(resolve);
+                } else resolve();
+            });
+            await Promise.all(Array.from(items).map(item => {
+                const entry = item.webkitGetAsEntry?.();
+                return entry ? traverse(entry, '') : Promise.resolve();
+            }));
+            return files;
+        }
+
+        let currentJobId = null;
+        let pollTimer = null;
+        let totalsCache = { dataset_a: 0, dataset_b: 0 };
+        let thetaStartTime = null;
+        let lastResultPayload = null;
+        let showingAlternateScenario = false;
+        refreshRunButtonAfterUploads();
+
+        /* why: avoid chart duplication on re-run; what: track Chart.js instances */
+        const chartInstances = {};
+        function destroyCharts() {
+            Object.values(chartInstances).forEach(c => c.destroy());
+            Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
+        }
+        /* why: theme-aware palette; what: detect light mode and return matching colors */
+        function chartColors() {
+            const light = rootElement.dataset.theme === 'light';
+            return {
+                a: light ? '#2563eb' : '#3b82f6',
+                b: light ? '#7c3aed' : '#a78bfa',
+                grid: light ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)',
+                tick: light ? '#334155' : '#94a3b8',
+                inRange: light ? '#16a34a' : '#4ade80',
+                outRange: light ? '#dc2626' : '#f87171',
+                outBg: light ? 'rgba(220,38,38,0.15)' : 'rgba(248,113,113,0.15)',
+                inBg: light ? 'rgba(22,163,74,0.15)' : 'rgba(74,222,128,0.15)',
+            };
+        }
+        /* why: gaussian PDF for bell curve points; what: f(x) = exp(-0.5*((x-mu)/s)^2) / (s*sqrt(2pi)) */
+        function gaussPDF(x, mu, sigma) {
+            const z = (x - mu) / sigma;
+            return Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI));
+        }
+        /* why: generate bell curve xy pairs; what: N points spanning mu ± 4*sigma */
+        function bellCurvePoints(mu, sigma, n = 200) {
+            const xs = [], ys = [];
+            const lo = mu - 4 * sigma, hi = mu + 4 * sigma, step = (hi - lo) / (n - 1);
+            for (let i = 0; i < n; i++) {
+                const x = lo + i * step;
+                xs.push(+x.toFixed(6));
+                ys.push(gaussPDF(x, mu, sigma));
+            }
+            return { xs, ys };
+        }
+        /* why: build one bell-curve chart; what: target distribution + source bound lines + shaded in-range */
+        function makeBellChart(canvasId, targetBounds, sourceBounds, coverage, label, colors) {
+            const ctx = document.getElementById(canvasId)?.getContext('2d');
+            if (!ctx) return null;
+            const mu = targetBounds.overall;
+            const sigma = Math.max(1e-6, (targetBounds.upper - targetBounds.lower) / 4);
+            const { xs, ys } = bellCurvePoints(mu, sigma);
+            const sLo = sourceBounds.lower, sHi = sourceBounds.upper;
+            /* why: separate in-range segment; what: null out points outside source bounds so fill only covers the overlap */
+            const ysInRange = xs.map((x, i) => (x >= sLo && x <= sHi) ? ys[i] : null);
+            /* why: vertical bound markers; what: two thin line datasets at lower/upper */
+            const yMax = Math.max(...ys) * 1.1;
+            const boundLine = (bx) => ({ x: bx, y: yMax });
+            const boundBase = (bx) => ({ x: bx, y: 0 });
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: xs,
+                    datasets: [
+                        {
+                            label: `${label} distribution`,
+                            data: ys,
+                            borderColor: colors.curve,
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: { target: 'origin', above: colors.curveBg },
+                            tension: 0.4,
+                            order: 2,
+                        },
+                        {
+                            label: `In range (${coverage.percent_in_range.toFixed(1)}%)`,
+                            data: ysInRange,
+                            borderColor: colors.inRange,
+                            borderWidth: 0,
+                            pointRadius: 0,
+                            fill: { target: 'origin', above: colors.inFill },
+                            tension: 0.4,
+                            spanGaps: false,
+                            order: 1,
+                        },
+                        {
+                            label: 'Lower bound',
+                            data: [boundBase(sLo), boundLine(sLo)],
+                            borderColor: colors.boundLine,
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+                            order: 0,
+                        },
+                        {
+                            label: 'Upper bound',
+                            data: [boundBase(sHi), boundLine(sHi)],
+                            borderColor: colors.boundLine,
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+                            order: 0,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: colors.tick, font: { size: 11 }, usePointStyle: true, boxWidth: 8,
+                                filter: item => !['Lower bound', 'Upper bound'].includes(item.text) || item.datasetIndex === 2
+                            },
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: pts => `θ = ${pts[0]?.label ?? ''}`,
+                                label: ctx => ctx.dataset.label.startsWith('Lower') || ctx.dataset.label.startsWith('Upper') ? null : `${ctx.dataset.label}: ${ctx.raw?.toFixed?.(2) ?? ctx.raw?.y?.toFixed(2) ?? ''}`,
+                            },
+                            filter: item => item.raw !== null,
+                        },
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'θ value', color: colors.tick },
+                            ticks: { color: colors.tick, maxTicksLimit: 8 },
+                            grid: { color: colors.grid },
+                        },
+                        y: {
+                            title: { display: true, text: 'Density', color: colors.tick },
+                            ticks: { color: colors.tick, maxTicksLimit: 6 },
+                            grid: { color: colors.grid },
+                            beginAtZero: true,
+                        },
+                    },
+                },
+                /* why: draw percentage badge over the shaded zone; what: custom afterDraw plugin */
+                plugins: [{
+                    id: 'coverageBadge',
+                    afterDraw(chart) {
+                        const { ctx: cx, chartArea, scales: { x: xScale, y: yScale } } = chart;
+                        const midX = xScale.getPixelForValue((sLo + sHi) / 2);
+                        const topY = chartArea.top + 18;
+                        cx.save();
+                        const txt = `${coverage.percent_in_range.toFixed(1)}%`;
+                        cx.font = 'bold 14px Inter, sans-serif';
+                        const tw = cx.measureText(txt).width;
+                        cx.fillStyle = colors.inFill;
+                        cx.beginPath();
+                        cx.roundRect(midX - tw / 2 - 8, topY - 12, tw + 16, 24, 6);
+                        cx.fill();
+                        cx.fillStyle = colors.inRange;
+                        cx.textAlign = 'center';
+                        cx.textBaseline = 'middle';
+                        cx.fillText(txt, midX, topY);
+                        cx.restore();
+                    }
+                }],
+            });
+        }
+        function renderCharts(data) {
+            destroyCharts();
+            const c = chartColors();
+            const bellColors = {
+                curve: c.a, curveBg: c.inBg,
+                inRange: c.inRange, inFill: c.inBg.replace('0.15', '0.45'),
+                boundLine: c.outRange, tick: c.tick, grid: c.grid,
+            };
+            /* A→B: target is B's distribution, source bounds from A */
+            chartInstances.covAB = makeBellChart('chartCovAB', data.dataset_b_bounds, data.dataset_a_bounds, data.coverage_a_on_b, 'Dataset B', { ...bellColors, curve: c.b, curveBg: 'rgba(124,58,237,0.1)' });
+            /* B→A: target is A's distribution, source bounds from B */
+            chartInstances.covBA = makeBellChart('chartCovBA', data.dataset_a_bounds, data.dataset_b_bounds, data.coverage_b_on_a, 'Dataset A', bellColors);
+        }
+
+        form.addEventListener('submit', (e) => e.preventDefault());
+        thetaBtn.addEventListener('click', startThetaConversion);
+
+        function bindUploadCounter(id) {
+            const root = document.getElementById(id);
+            return {
+                root,
+                countNode: root ? root.querySelector('.upload-counter__count') : null,
+                labelNode: root ? root.querySelector('.upload-counter__label') : null,
+                statusNode: root ? root.querySelector('.upload-counter__status') : null,
+                fillNode: root ? root.querySelector('.upload-counter__fill') : null
+            };
+        }
+
+        function formatImageCountLabel(total) {
+            const count = Math.max(0, Number(total) || 0);
+            const noun = count === 1 ? 'image' : 'images';
+            return `${count.toLocaleString()} ${noun}`;
+        }
+
+        function setUploadCounterState(key, state, total = 0, processed = 0) {
+            const counter = uploadCounters[key];
+            if (!counter || !counter.root || !counter.countNode || !counter.labelNode || !counter.statusNode || !counter.fillNode) return;
+            const safeTotal = Math.max(0, Number(total) || 0);
+            const safeProcessed = safeTotal ? Math.min(safeTotal, Math.max(0, Number(processed) || 0)) : 0;
+            if (!safeTotal) {
+                counter.root.classList.remove('active');
+                counter.root.classList.remove('is-uploading', 'is-uploaded');
+                counter.countNode.dataset.count = '0';
+                counter.countNode.textContent = '0';
+                counter.labelNode.textContent = 'No images selected';
+                counter.statusNode.textContent = 'Waiting for folder';
+                counter.fillNode.style.width = '0%';
+                return;
+            }
+            const percent = Math.round((safeProcessed / safeTotal) * 100);
+            counter.root.classList.add('active');
+            counter.root.classList.remove('is-uploading', 'is-uploaded');
+            counter.labelNode.textContent = `Images: ${formatImageCountLabel(safeTotal)}`;
+            counter.countNode.dataset.count = String(safeTotal);
+            counter.countNode.textContent = safeTotal.toLocaleString();
+            counter.fillNode.style.width = `${percent}%`;
+            if (state === 'uploaded') {
+                counter.root.classList.add('is-uploaded');
+                counter.statusNode.textContent = `Uploaded ${safeProcessed.toLocaleString()} / ${safeTotal.toLocaleString()} (${percent}%)`;
+                return;
+            }
+            if (state === 'uploading') {
+                counter.root.classList.add('is-uploading');
+                counter.statusNode.textContent = `Uploading ${safeProcessed.toLocaleString()} / ${safeTotal.toLocaleString()} (${percent}%)`;
+                return;
+            }
+            counter.statusNode.textContent = `Ready to upload ${formatImageCountLabel(safeTotal)}`;
+        }
+
+        function handleFolderSelection(key, fileList) {
+            const total = fileList ? Array.from(fileList).length : 0;
+            setUploadCounterState(key, 'selected', total, 0);
+        }
+
+        function maybeSyncUploadCounters(status, datasetA = {}, datasetB = {}) {
+            const uploadDone = ['theta_running', 'theta_ready', 'dcb_running', 'completed'].includes(status);
+            const uploadActive = ['queued', 'staging'].includes(status);
+            const syncCounter = (key, dataset) => {
+                const fallbackTotal = totalsCache[key] || 0;
+                const total = typeof dataset.total === 'number' ? dataset.total : fallbackTotal;
+                const stagedProcessed = typeof dataset.processed === 'number' ? dataset.processed : 0;
+                const processed = uploadDone ? total : stagedProcessed;
+                const state = uploadDone ? 'uploaded' : (uploadActive ? 'uploading' : 'selected');
+                setUploadCounterState(key, state, total, processed);
+            };
+            syncCounter('dataset_a', datasetA);
+            syncCounter('dataset_b', datasetB);
+        }
+
+        function setButtonState({ disabled, label } = {}) {
+            if (typeof disabled === 'boolean') thetaBtn.disabled = disabled;
+            if (label) thetaBtn.textContent = label;
+        }
+
+        function markStep(card, state) {
+            if (!card) return;
+            card.classList.remove('active', 'ready', 'locked');
+            if (state) card.classList.add(state);
+        }
+
+        function setStepMessaging(key, message = {}) {
+            const handle = stepMessaging[key];
+            if (!handle) return;
+            if (message.pill && handle.pill) {
+                handle.pill.textContent = message.pill;
+            }
+            if (message.copy && handle.copy) {
+                handle.copy.textContent = message.copy;
+            }
+        }
+
+        function validateUploads() {
+            const check = key => {
+                const files = datasetFiles[key];
+                const hasImg = files.some(f => !f.name.toLowerCase().endsWith('.csv'));
+                const hasCsv = files.some(f => f.name.toLowerCase().endsWith('.csv'));
+                return hasImg && hasCsv;
+            };
+            if (!check('dataset_a')) return { ok: false, message: 'Dataset A: drop a folder containing images and a CSV file.' };
+            if (!check('dataset_b')) return { ok: false, message: 'Dataset B: drop a folder containing images and a CSV file.' };
+            return { ok: true };
+        }
+
+        async function startThetaConversion() {
+            if (uploadSession.launching || currentJobId) return;
+            error.classList.remove('active');
+            const validation = validateUploads();
+            if (!validation.ok) {
+                error.textContent = validation.message;
+                error.classList.add('active');
+                return;
+            }
+            if (uploadSession.inFlight.dataset_a || uploadSession.inFlight.dataset_b) {
+                error.textContent = 'Error: Uploads are still in progress. Please wait for both bars to finish.';
+                error.classList.add('active');
+                return;
+            }
+            if (!uploadSession.complete.dataset_a || !uploadSession.complete.dataset_b) {
+                setStepMessaging('theta', {
+                    pill: 'Step 1 • Uploading Datasets',
+                    copy: 'Uploading Dataset A and Dataset B before θ conversion.'
+                });
+                setStepMessaging('dcb', {
+                    pill: 'Step 2 • SDCD Locked',
+                    copy: 'Starts automatically after θ conversion.'
+                });
+                const [okA, okB] = await Promise.all([
+                    uploadSession.complete.dataset_a ? Promise.resolve(true) : startDatasetUpload('dataset_a'),
+                    uploadSession.complete.dataset_b ? Promise.resolve(true) : startDatasetUpload('dataset_b'),
+                ]);
+                if (!okA || !okB) {
+                    return;
+                }
+            }
+            await launchPipelineFromStagedUploads();
+        }
+
+        async function launchPipelineFromStagedUploads() {
+            const sessionId = uploadSession.id;
+            if (!sessionId) {
+                error.textContent = 'Error: Upload session expired. Re-select both dataset folders.';
+                error.classList.add('active');
+                return;
+            }
+
+            uploadSession.launching = true;
+            results.classList.remove('active');
+            if (recommendationPanel) recommendationPanel.innerHTML = '';
+            if (resultHighlight) resultHighlight.textContent = '';
+            if (resultSummary) resultSummary.innerHTML = '';
+            if (altScenarioBtn) {
+                altScenarioBtn.disabled = true;
+                altScenarioBtn.textContent = 'Flip source/target preview';
+            }
+            lastResultPayload = null;
+            showingAlternateScenario = false;
+
+            totalsCache = {
+                dataset_a: datasetImageTotals.dataset_a || totalsCache.dataset_a || 0,
+                dataset_b: datasetImageTotals.dataset_b || totalsCache.dataset_b || 0,
+            };
+            currentJobId = null;
+            stopPolling();
+            thetaStartTime = performance.now();
+
+            setButtonState({
+                disabled: true,
+                label: 'Running…'
+            });
+            setStepMessaging('theta', {
+                pill: 'Step 1 • θ Conversion',
+                copy: 'Uploads finished. Starting θ extraction.'
+            });
+            setStepMessaging('dcb', {
+                pill: 'Step 2 • SDCD Locked',
+                copy: 'Auto-starts after θ conversion finishes.'
+            });
+            prepareProgressBoard(totalsCache, {
+                statusText: 'Step 1/2 • Upload complete. Starting θ extraction…',
+                logText: 'Both datasets uploaded. Pipeline is launching now.'
+            });
+            markStep(stepTheta, 'active');
+            markStep(stepDcb, 'locked');
+
+            try {
+                const response = await fetch('/theta/staged', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, auto_chain: 1 })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    const message = response.status === 413
+                        ? (data.error || 'Upload exceeds server limit. Try fewer files or smaller batches.')
+                        : (data.error || 'θ conversion failed to start from staged uploads');
+                    throw new Error(message);
+                }
+                totalsCache = data.totals || totalsCache;
+                uploadSession.id = null;
+                uploadSession.complete.dataset_a = false;
+                uploadSession.complete.dataset_b = false;
+                currentJobId = data.job_id;
+                prepareProgressBoard(totalsCache);
+                beginPolling(currentJobId);
+            } catch (err) {
+                thetaStartTime = null;
+                error.textContent = `Error: ${err.message}`;
+                error.classList.add('active');
+                progressBoard.classList.remove('active');
+                setButtonState({ disabled: false, label: 'Run' });
+            } finally {
+                uploadSession.launching = false;
+                refreshRunButtonAfterUploads();
+            }
+        }
+
+        function prepareProgressBoard(totals, opts = {}) {
+            progressBoard.classList.add('active');
+            const statusText = opts.statusText || 'Step 1/2 • Uploading datasets…';
+            const logText = opts.logText || 'Pipeline is queued: θ conversion then SDCD computation.';
+            jobStatus.textContent = statusText;
+            jobLog.textContent = logText;
+            updateDatasetView('A', { total: totals.dataset_a || 0, processed: 0 });
+            updateDatasetView('B', { total: totals.dataset_b || 0, processed: 0 });
+        }
+
+        function beginPolling(jobId) {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+            }
+            currentJobId = jobId;
+            pollStatus();
+            pollTimer = setInterval(pollStatus, 1500);
+        }
+
+        async function pollStatus() {
+            if (!currentJobId) {
+                return;
+            }
+            try {
+                const response = await fetch(`/status/${currentJobId}`, { cache: 'no-store' });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Status check failed');
+                }
+                renderJobState(data);
+                if (data.status === 'theta_ready') {
+                    markStep(stepTheta, 'ready');
+                    markStep(stepDcb, 'active');
+                    const elapsed = thetaStartTime ? Math.max(1, Math.round((performance.now() - thetaStartTime) / 1000)) : null;
+                    setStepMessaging('theta', {
+                        pill: 'Step 1 • θ Complete ✓',
+                        copy: elapsed ? `Finished in ${elapsed}s. Starting SDCD automatically.` : 'θ conversion complete. Starting SDCD automatically.'
+                    });
+                    setStepMessaging('dcb', {
+                        pill: 'Step 2 • SDCD Starting…',
+                        copy: 'Computing SDCD scores from saved θ CSVs.'
+                    });
+                    thetaStartTime = null;
+                    setButtonState({ disabled: true, label: 'Running…' });
+                } else if (data.status === 'completed' && data.result) {
+                    stopPolling();
+                    currentJobId = null;
+                    markStep(stepTheta, 'ready');
+                    markStep(stepDcb, 'ready');
+                    setStepMessaging('dcb', {
+                        pill: 'Step 2 • SDCD Computed ✓',
+                        copy: 'Bounds and SDCD scores are ready below.'
+                    });
+                    refreshRunButtonAfterUploads();
+                    progressBoard.classList.remove('active');
+                    displayResults(data.result);
+                } else if (data.status === 'error') {
+                    stopPolling();
+                    currentJobId = null;
+                    progressBoard.classList.remove('active');
+                    error.textContent = `Error: ${data.error || 'Job failed'}`;
+                    error.classList.add('active');
+                    refreshRunButtonAfterUploads();
+                }
+            } catch (err) {
+                stopPolling();
+                currentJobId = null;
+                progressBoard.classList.remove('active');
+                error.textContent = `Error: ${err.message}`;
+                error.classList.add('active');
+                refreshRunButtonAfterUploads();
+            }
+        }
+
+        function renderJobState(job) {
+            const statusCopy = {
+                queued: 'Step 1/2 • Preparing θ extraction…',
+                staging: 'Step 1/2 • Finalizing staged files…',
+                theta_running: 'Step 1/2 • Extracting θ values…',
+                theta_ready: 'Step 1/2 complete • Starting SDCD…',
+                dcb_running: 'Step 2/2 • Computing SDCD scores…',
+                completed: 'Pipeline complete • Results ready',
+                error: 'Pipeline failed'
+            };
+            jobStatus.textContent = statusCopy[job.status] || `Status: ${job.status}`;
+            jobLog.textContent = job.log && job.log.length ? job.log.slice(-2).join(' • ') : '';
+            const datasetA = job.datasets && job.datasets.A ? job.datasets.A : {};
+            const datasetB = job.datasets && job.datasets.B ? job.datasets.B : {};
+            updateDatasetView('A', datasetA);
+            updateDatasetView('B', datasetB);
+            maybeSyncUploadCounters(job.status, datasetA, datasetB);
+            if (job.status === 'theta_running') {
+                markStep(stepTheta, 'active');
+                markStep(stepDcb, 'locked');
+                setStepMessaging('theta', {
+                    pill: 'Step 1 • θ Conversion',
+                    copy: 'Extracting θ features…'
+                });
+            } else if (job.status === 'theta_ready') {
+                markStep(stepTheta, 'ready');
+                markStep(stepDcb, 'active');
+                setStepMessaging('dcb', {
+                    pill: 'Step 2 • SDCD Starting…',
+                    copy: 'Computing SDCD scores from saved θ CSVs.'
+                });
+            } else if (job.status === 'dcb_running') {
+                markStep(stepTheta, 'ready');
+                markStep(stepDcb, 'active');
+                if (thetaStartTime) {
+                    const elapsed = Math.max(1, Math.round((performance.now() - thetaStartTime) / 1000));
+                    setStepMessaging('theta', {
+                        pill: 'Step 1 • θ Complete ✓',
+                        copy: `Finished in ${elapsed}s.`
+                    });
+                    thetaStartTime = null;
+                }
+                setStepMessaging('dcb', {
+                    pill: 'Step 2 • SDCD Running…',
+                    copy: 'Computing SDCD scores with conformal bounds from saved θ CSVs.'
+                });
+                setButtonState({ disabled: true, label: 'Running…' });
+            }
+        }
+
+        function updateDatasetView(key, dataset = {}) {
+            const view = datasetViews[key];
+            if (!view) return;
+            const total = typeof dataset.total === 'number' ? dataset.total : 0;
+            const processed = typeof dataset.processed === 'number' ? dataset.processed : 0;
+            const percent = total ? Math.min(100, (processed / total) * 100) : 0;
+            view.fill.style.width = `${percent}%`;
+            view.count.textContent = `${processed}/${total}`;
+            view.image.textContent = dataset.last_image ? `Processing: ${dataset.last_image}` : 'Waiting for samples…';
+        }
+
+
+        function stopPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        function formatBoundValue(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return 'N/A';
+            return numeric.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function formatPercent(value, digits = 1) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return 'N/A';
+            return `${numeric.toFixed(digits)}%`;
+        }
+
+        const GENEVAL_RESULTS = Object.freeze([
+            { source: 'Messidor', target: 'Messidor-2', baseline: 62.2, geneval: 65.0 },
+            { source: 'Messidor-2', target: 'Messidor', baseline: 61.0, geneval: 67.0 }
+        ]);
+
+        function coverageForSource(payload, sourceName) {
+            if (!payload || !sourceName) return null;
+            if (sourceName === 'Dataset A') return payload.coverage_a_on_b;
+            if (sourceName === 'Dataset B') return payload.coverage_b_on_a;
+            return null;
+        }
+
+        function displayResults(data) {
+            lastResultPayload = data;
+            renderVerdict(data);
+            results.classList.add('active');
+            requestAnimationFrame(() => renderCharts(data));
+        }
+
+        /* why: visual-only output; what: animated bars + winner glow replace all text */
+        function renderVerdict(data) {
+            const v = document.getElementById('verdict');
+            if (!v) return;
+            const ab = data.coverage_a_on_b.percent_in_range;
+            const ba = data.coverage_b_on_a.percent_in_range;
+            const rec = data.recommendation;
+            const abWin = ab >= ba;
+            const recMatchesMessidorDirection = rec.source === 'Dataset B' && rec.target === 'Dataset A';
+            const genevalRows = GENEVAL_RESULTS.map(row => {
+                const isBest = row.source === 'Messidor-2' && row.target === 'Messidor';
+                return `
+                    <tr class="${isBest ? 'is-best' : ''}">
+                        <td>${row.source}</td>
+                        <td>${row.target}</td>
+                        <td>${row.baseline.toFixed(1)}%</td>
+                        <td>${row.geneval.toFixed(1)}%</td>
+                    </tr>
+                `;
+            }).join('');
+            const validationText = recMatchesMessidorDirection
+                ? 'Validation: <strong>Dataset B (Messidor-2) -> Dataset A (Messidor)</strong> reaches the top GenEval score (67.0%), matching the SDCD recommendation.'
+                : 'Validation: GenEval peaks at <strong>Messidor-2 -> Messidor (67.0%)</strong>, so Dataset B should be the source and Dataset A should be the target.';
+            v.innerHTML = `
+                <div class="verdict-row ${abWin ? 'winner' : ''}">
+                    <span class="verdict-label">A → B</span>
+                    <div class="verdict-track"><div class="verdict-fill" data-w="${ab}"></div></div>
+                    <span class="verdict-pct"><span class="verdict-metric">SDCD</span><span class="verdict-value">${ab.toFixed(1)}%</span></span>
+                </div>
+                <div class="verdict-row ${abWin ? '' : 'winner'}">
+                    <span class="verdict-label">B → A</span>
+                    <div class="verdict-track"><div class="verdict-fill" data-w="${ba}"></div></div>
+                    <span class="verdict-pct"><span class="verdict-metric">SDCD</span><span class="verdict-value">${ba.toFixed(1)}%</span></span>
+                </div>
+                <div class="verdict-rec">Recommendation : Use <span class="vr-arrow">${rec.source}</span> for better generalization on <span class="vr-arrow">${rec.target}</span></div>
+                <div class="geneval-block">
+                    <div class="geneval-title">GenEval Cross-Domain Results</div>
+                    <div class="geneval-caption">GenEval is reported as accuracy (%) on the target dataset.</div>
+                    <div class="geneval-scroll">
+                        <table class="geneval-table">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Target</th>
+                                    <th>Best baseline</th>
+                                    <th>GenEval (Accuracy %)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${genevalRows}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="geneval-note">${validationText}</p>
+                </div>
+            `;
+            requestAnimationFrame(() => {
+                v.querySelectorAll('.verdict-fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
+            });
+            const boxAB = document.getElementById('chartBoxAB');
+            const boxBA = document.getElementById('chartBoxBA');
+            if (boxAB) boxAB.classList.toggle('winner', abWin);
+            if (boxBA) boxBA.classList.toggle('winner', !abWin);
+        }
+    </script>
+</body>
+</html>
