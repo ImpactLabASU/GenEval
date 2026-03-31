@@ -1,4 +1,4 @@
-# GenEval: Multi-Modal Single-Source Domain Generalization for Medical Imaging
+# [WACV 2026] GenEval: Multi-Modal Single-Source Domain Generalization for Medical Imaging
 
 Official PyTorch implementation of **GenEval** (WACV 2026).
 
